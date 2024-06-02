@@ -54,3 +54,30 @@ uvicorn src.api.main:app --reload
 Only synthetic policy text is committed. Any names, MRNs, phone numbers,
 addresses in the sample data are fake and are there to exercise the
 redactor.
+
+## Why bother with all this
+
+Off-the-shelf RAG assumes the docs are safe to send to the model and the
+answer is safe to hand back. In healthcare (and banking, and any regulated
+data), neither is true. Every one of these controls exists because the
+alternative is a HIPAA breach or a HITRUST audit finding:
+
+1. PHI stripped before prompt build. Even if the source document is a
+   templated policy, member notes stapled to it are common.
+2. ACL applied at retrieval. Roles and per-patient consent live in a JWT
+   claim, not in the document body.
+3. Guardrails on both prompt and response. Prompt injection can and does
+   try to exfiltrate other members' data.
+4. Cited answer or no answer. The model is not allowed to make up a
+   claim absent a source chunk.
+5. Tamper-evident audit. Every request writes a hash-chained record of
+   what was retrieved, what was redacted, what the guardrail verdict was,
+   and what was returned. Auditors love this. Fraud investigators love
+   this more.
+
+## Non-goals
+
+- Not a hosted product. This is a reference stack.
+- Not clinical decision support (guidelines lookup only).
+- Does not attempt to fine-tune the base model.
+
