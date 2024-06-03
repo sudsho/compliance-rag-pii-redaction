@@ -1,0 +1,122 @@
+# custom recognizer patterns for hipaa safe harbor identifiers.
+# presidio built-ins cover: EMAIL, PHONE_NUMBER, US_SSN, IP, URL, CREDIT_CARD,
+# LOCATION, DATE_TIME, PERSON, US_BANK_NUMBER, US_DRIVER_LICENSE, US_PASSPORT.
+# below fills the remaining hipaa identifiers.
+
+recognizers:
+  - name: MRN
+    supported_entity: MEDICAL_RECORD_NUMBER
+    patterns:
+      - name: mrn-numeric
+        regex: '\b(?:MRN[:# ]*|mrn[:# ]*)?[0-9]{6,10}\b'
+        score: 0.55
+      - name: mrn-labeled
+        regex: '\b(?:Medical Record Number|Patient ID|Chart Number)[:# ]+[A-Z0-9-]{5,15}\b'
+        score: 0.85
+    context: [mrn, medical record, patient id, chart]
+
+  - name: NPI
+    # national provider identifier, 10 digit luhn
+    supported_entity: NPI
+    patterns:
+      - name: npi-10-digit
+        regex: '\b[12][0-9]{9}\b'
+        score: 0.35
+      - name: npi-labeled
+        regex: '\bNPI[:# ]+[0-9]{10}\b'
+        score: 0.9
+    context: [npi, national provider, provider id]
+
+  - name: HEALTH_PLAN_ID
+    supported_entity: HEALTH_PLAN_BENEFICIARY
+    patterns:
+      - name: plan-id
+        regex: '\b(?:Member ID|Subscriber ID|Plan ID|Group #|Policy #)[:# ]+[A-Z0-9-]{5,20}\b'
+        score: 0.85
+    context: [member id, subscriber, health plan, group number]
+
+  - name: DEA_NUMBER
+    # dea 2 letters + 7 digits + optional check
+    supported_entity: DEA_NUMBER
+    patterns:
+      - name: dea
+        regex: '\b[A-Z]{2}[0-9]{7}\b'
+        score: 0.55
+      - name: dea-labeled
+        regex: '\bDEA[:# ]+[A-Z]{2}[0-9]{7}\b'
+        score: 0.95
+    context: [dea, controlled substance, prescription]
+
+  - name: ICD10
+    # not phi by itself but we tag for context
+    supported_entity: ICD10_CODE
+    patterns:
+      - name: icd10
+        regex: '\b[A-TV-Z][0-9][A-Z0-9](?:\.[A-Z0-9]{1,4})?\b'
+        score: 0.4
+    context: [diagnosis, icd, condition]
+
+  - name: DEVICE_SERIAL
+    supported_entity: DEVICE_SERIAL
+    patterns:
+      - name: device-serial
+        regex: '\b(?:Serial|SN|S/N|Device ID)[:# ]+[A-Z0-9-]{6,20}\b'
+        score: 0.75
+    context: [device, serial, implant, pacemaker]
+
+  - name: VEHICLE_VIN
+    supported_entity: VIN
+    patterns:
+      - name: vin
+        regex: '\b[A-HJ-NPR-Z0-9]{17}\b'
+        score: 0.6
+    context: [vin, vehicle, license plate]
+
+  - name: BIOMETRIC
+    supported_entity: BIOMETRIC
+    patterns:
+      - name: fingerprint-hash
+        regex: '\b(?:fingerprint|retina|voiceprint)[:# ]+[a-f0-9]{32,64}\b'
+        score: 0.9
+    context: [biometric, fingerprint, retina, voice print]
+
+# operator config for each entity type
+operators:
+  PERSON:
+    type: pseudonymize
+    prefix: PERSON
+  EMAIL_ADDRESS:
+    type: pseudonymize
+    prefix: EMAIL
+  PHONE_NUMBER:
+    type: pseudonymize
+    prefix: PHONE
+  US_SSN:
+    type: mask
+    chars_to_mask: 5
+    from_end: true
+  MEDICAL_RECORD_NUMBER:
+    type: pseudonymize
+    prefix: MRN
+  HEALTH_PLAN_BENEFICIARY:
+    type: pseudonymize
+    prefix: PLAN
+  NPI:
+    type: pseudonymize
+    prefix: NPI
+  DATE_TIME:
+    type: date_shift
+    days_max: 60
+  LOCATION:
+    type: replace
+    new_value: "<LOCATION>"
+  IP_ADDRESS:
+    type: replace
+    new_value: "<IP>"
+  URL:
+    type: replace
+    new_value: "<URL>"
+  CREDIT_CARD:
+    type: mask
+    chars_to_mask: 12
+    from_end: true
