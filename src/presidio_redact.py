@@ -31,6 +31,8 @@ from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, Recogn
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
+from src.pseudonym import PseudonymConfig, pseudonym
+
 
 @dataclass
 class RedactionResult:
@@ -46,10 +48,12 @@ class Redactor:
         self,
         recognizer_config: str | Path | None = None,
         language: str = "en",
+        pseudonym_config: PseudonymConfig | None = None,
     ) -> None:
         self.analyzer = AnalyzerEngine(default_score_threshold=0.35)
         self.anonymizer = AnonymizerEngine()
         self.language = language
+        self.pseudonym_config = pseudonym_config
         self._operator_config: dict = {}
         if recognizer_config:
             self._load_config(Path(recognizer_config))
@@ -76,7 +80,7 @@ class Redactor:
 
     def redact(self, text: str) -> RedactionResult:
         results = self.analyze(text)
-        operators = self._build_operators()
+        operators = self._build_operators(text, results)
         anon = self.anonymizer.anonymize(
             text=text, analyzer_results=results, operators=operators
         )
@@ -86,10 +90,22 @@ class Redactor:
         ]
         return RedactionResult(text=anon.text, entities=entities, stats=_summarize(results))
 
-    def _build_operators(self) -> dict[str, OperatorConfig]:
+    def _build_operators(
+        self, text: str, results: list[RecognizerResult]
+    ) -> dict[str, OperatorConfig]:
         ops: dict[str, OperatorConfig] = {
             "DEFAULT": OperatorConfig("replace", {"new_value": "<REDACTED>"})
         }
+        # per-instance pseudonym table so identical values collapse to same tag
+        pseudo_by_slot: dict[tuple[str, str], str] = {}
+        for r in results:
+            surface = text[r.start : r.end]
+            spec = self._operator_config.get(r.entity_type, {})
+            if spec.get("type") == "pseudonymize" and self.pseudonym_config:
+                pseudo_by_slot[(r.entity_type, surface)] = pseudonym(
+                    surface, spec.get("prefix", r.entity_type), self.pseudonym_config
+                )
+
         for entity, spec in self._operator_config.items():
             kind = spec.get("type", "replace")
             if kind == "replace":
@@ -104,10 +120,18 @@ class Redactor:
                     },
                 )
             elif kind == "pseudonymize":
-                # actual pseudonym generation applied in _post_pseudonymize below
-                ops[entity] = OperatorConfig(
-                    "replace", {"new_value": f"<{spec.get('prefix', entity)}>"}
-                )
+                prefix = spec.get("prefix", entity)
+                if self.pseudonym_config is None:
+                    ops[entity] = OperatorConfig("replace", {"new_value": f"<{prefix}>"})
+                else:
+                    ops[entity] = OperatorConfig(
+                        "custom",
+                        {
+                            "lambda": lambda x, _p=prefix: pseudonym(
+                                x, _p, self.pseudonym_config
+                            )
+                        },
+                    )
             elif kind == "date_shift":
                 ops[entity] = OperatorConfig("replace", {"new_value": "<DATE>"})
         return ops
