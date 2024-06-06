@@ -7,12 +7,12 @@ recognizers:
   - name: MRN
     supported_entity: MEDICAL_RECORD_NUMBER
     patterns:
-      - name: mrn-numeric
-        regex: '\b(?:MRN[:# ]*|mrn[:# ]*)?[0-9]{6,10}\b'
-        score: 0.55
       - name: mrn-labeled
-        regex: '\b(?:Medical Record Number|Patient ID|Chart Number)[:# ]+[A-Z0-9-]{5,15}\b'
-        score: 0.85
+        regex: '(?:\bMRN|\bmrn|Medical Record Number|Patient ID|Chart Number)[:# ]+([A-Z0-9-]{5,15})'
+        score: 0.9
+      - name: mrn-9-digit
+        regex: '\b0{2,3}[0-9]{6,7}\b'
+        score: 0.4
     context: [mrn, medical record, patient id, chart]
 
   - name: NPI
