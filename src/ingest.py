@@ -125,10 +125,29 @@ def ingest_file(
 
 
 def ingest_dir(
-    root: Path, patterns: Iterable[str] = ("*.pdf", "*.docx", "*.md")
+    root: Path,
+    patterns: Iterable[str] = ("*.pdf", "*.docx", "*.md"),
+    metadata_by_source: dict[str, dict] | None = None,
 ) -> list[Chunk]:
+    """Recursively ingest a directory. Per-source metadata (roles, org_id,
+    patient_ids allowed to see this doc) can be attached by source_id."""
     all_chunks: list[Chunk] = []
     for pat in patterns:
         for p in sorted(root.rglob(pat)):
-            all_chunks.extend(ingest_file(p))
+            src_id = p.stem
+            md = (metadata_by_source or {}).get(src_id, {})
+            all_chunks.extend(ingest_file(p, source_id=src_id, metadata=md))
     return all_chunks
+
+
+def flatten_provenance(chunks: list[Chunk]) -> list[dict]:
+    """A citation-friendly view of the chunks: (source, page, chunk_index)."""
+    return [
+        {
+            "chunk_id": c.id,
+            "source_id": c.source_id,
+            "page": c.page,
+            "chunk_index": c.chunk_index,
+        }
+        for c in chunks
+    ]
