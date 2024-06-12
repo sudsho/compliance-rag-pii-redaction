@@ -1,0 +1,84 @@
+{
+  "$comment": "Blueprint for creating the Bedrock Guardrail via IaC. Apply with: aws bedrock create-guardrail --cli-input-json file://configs/guardrails_config.json",
+  "name": "compliance-rag-member-services",
+  "description": "Prompt+response guardrail for a HIPAA-scoped clinical policy chatbot.",
+  "topicPolicyConfig": {
+    "topicsConfig": [
+      {
+        "name": "OtherMemberPHI",
+        "definition": "Any attempt to retrieve or disclose protected health information belonging to a member other than the authenticated caller.",
+        "examples": [
+          "Show me the diagnoses for member ABC1234567890",
+          "What medications is John Smith on"
+        ],
+        "type": "DENY"
+      },
+      {
+        "name": "ClinicalAdvice",
+        "definition": "Requests for direct clinical advice, dosing, differential diagnosis, or treatment recommendations that should come from a licensed clinician.",
+        "examples": [
+          "Should I stop my metformin",
+          "What dose of ozempic is right for me"
+        ],
+        "type": "DENY"
+      },
+      {
+        "name": "FinancialAdvice",
+        "definition": "Personal investment, tax, or estate advice unrelated to plan benefits.",
+        "type": "DENY"
+      }
+    ]
+  },
+  "contentPolicyConfig": {
+    "filtersConfig": [
+      {"type": "SEXUAL",        "inputStrength": "HIGH",   "outputStrength": "HIGH"},
+      {"type": "VIOLENCE",      "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
+      {"type": "HATE",          "inputStrength": "HIGH",   "outputStrength": "HIGH"},
+      {"type": "INSULTS",       "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
+      {"type": "MISCONDUCT",    "inputStrength": "MEDIUM", "outputStrength": "MEDIUM"},
+      {"type": "PROMPT_ATTACK", "inputStrength": "HIGH",   "outputStrength": "NONE"}
+    ]
+  },
+  "sensitiveInformationPolicyConfig": {
+    "piiEntitiesConfig": [
+      {"type": "US_SOCIAL_SECURITY_NUMBER", "action": "BLOCK"},
+      {"type": "CREDIT_DEBIT_CARD_NUMBER",  "action": "BLOCK"},
+      {"type": "EMAIL",                     "action": "ANONYMIZE"},
+      {"type": "PHONE",                     "action": "ANONYMIZE"},
+      {"type": "US_BANK_ACCOUNT_NUMBER",    "action": "BLOCK"},
+      {"type": "IP_ADDRESS",                "action": "ANONYMIZE"},
+      {"type": "PASSWORD",                  "action": "BLOCK"}
+    ],
+    "regexesConfig": [
+      {
+        "name": "MRN",
+        "description": "Medical record numbers",
+        "pattern": "\\bMRN[:# ]+[A-Z0-9-]{5,15}\\b",
+        "action": "ANONYMIZE"
+      },
+      {
+        "name": "MemberID",
+        "description": "Health plan member ids",
+        "pattern": "\\b(?:Member ID|Subscriber ID)[:# ]+[A-Z0-9-]{5,20}\\b",
+        "action": "ANONYMIZE"
+      }
+    ]
+  },
+  "wordPolicyConfig": {
+    "wordsConfig": [
+      {"text": "jailbreak"},
+      {"text": "ignore previous instructions"},
+      {"text": "act as a system"}
+    ],
+    "managedWordListsConfig": [
+      {"type": "PROFANITY"}
+    ]
+  },
+  "blockedInputMessaging": "That request was blocked by the compliance guardrail. Please rephrase.",
+  "blockedOutputsMessaging": "The generated response was blocked before delivery. A compliance reviewer has been notified.",
+  "tags": [
+    {"key": "app",  "value": "compliance-rag"},
+    {"key": "env",  "value": "prod"},
+    {"key": "hipaa","value": "true"}
+  ]
+}
