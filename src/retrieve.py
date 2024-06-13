@@ -108,6 +108,14 @@ class Retriever:
         return keep
 
     def retrieve(self, query: str, identity: CallerIdentity) -> list[Hit]:
+        # belt-and-suspenders: even if _acl_where is bypassed, refuse on
+        # missing role or org
+        if not identity.roles or not identity.org_id:
+            log.warning(
+                "retrieve.deny_missing_identity user=%s org=%s roles=%s",
+                identity.user_id, identity.org_id, identity.roles,
+            )
+            return []
         where = _acl_where(identity)
         raw = self.store.query(text=query, where=where, k=max(self.k_dense, self.k_bm25) * 2)
         ids = raw.get("ids", [[]])[0]
