@@ -42,7 +42,12 @@ def _extract_citations(text: str, hits: list[Hit]) -> list[dict]:
     allowed = {(h.source_id, h.page, h.chunk_index) for h in hits}
     cits: list[dict] = []
     seen: set[tuple[str, int, int]] = set()
-    for m in re.finditer(r"\[([A-Za-z0-9_.-]+):p(\d+)#(\d+)\]", text):
+    # tolerate optional trailing period, comma, semicolon before the closing ']'
+    # and interior whitespace claude sometimes emits
+    pattern = re.compile(
+        r"\[\s*([A-Za-z0-9_.-]+)\s*:\s*p\s*(\d+)\s*#\s*(\d+)\s*[.,;]?\s*\]"
+    )
+    for m in pattern.finditer(text):
         key = (m.group(1), int(m.group(2)), int(m.group(3)))
         if key in allowed and key not in seen:
             cits.append({"source_id": key[0], "page": key[1], "chunk_index": key[2]})
