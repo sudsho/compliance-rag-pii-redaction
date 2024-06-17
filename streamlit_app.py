@@ -110,13 +110,24 @@ if q:
     if show_redaction:
         st.divider()
         st.subheader("redaction preview (what the LLM actually saw)")
-        st.info(
-            "The raw question is passed through Presidio before it reaches Bedrock. "
-            "Below is the redacted form + entity summary."
+        prev = requests.post(
+            f"{API_BASE}/redact/preview",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"text": q},
+            timeout=15,
         )
-        # local preview via /health-like endpoint would be nicer; for now
-        # reconstruct rough stats from the response metadata.
-        st.code(f"redacted_entities_n = {body['redaction_n']}", language="text")
+        if prev.ok:
+            data = prev.json()
+            st.code(data["redacted_text"], language="text")
+            counts = data["stats"].get("by_type", {})
+            if counts:
+                st.write("entities detected:")
+                st.dataframe(
+                    {"entity": list(counts.keys()), "count": list(counts.values())},
+                    use_container_width=True,
+                )
+        else:
+            st.warning("redaction preview endpoint unavailable")
 
     st.session_state.history.append(
         {"role": "assistant", "content": body["answer"], "citations": body.get("citations", [])}

@@ -89,6 +89,24 @@ def health():
     return HealthResponse(status="ok", version=__version__, store_count=count)
 
 
+@app.post("/redact/preview")
+def redact_preview(payload: dict, ident=Depends(get_identity)):
+    """Return the redacted form of a text plus per-entity stats.
+
+    UI convenience so the operator can eyeball what the LLM will see
+    before hitting /ask.
+    """
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(status_code=400, detail="text required")
+    r = _deps.redactor.redact(text)
+    return {
+        "redacted_text": r.text,
+        "entities": r.entities,
+        "stats": r.stats,
+    }
+
+
 @app.post("/ingest", response_model=IngestResponse)
 def ingest(req: IngestRequest, ident=Depends(get_identity)):
     if "admin" not in ident.roles:
