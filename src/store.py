@@ -83,13 +83,14 @@ class Store:
             return
         vectors = self.embedder.encode([c.text for c in chunks])
         acl_md = acl.as_metadata()
+        # chroma <=0.5 rejects non-scalar metadata values; coerce carefully
         metadatas = [
             {
                 **acl_md,
-                "source_id": c.source_id,
-                "source_path": c.source_path,
-                "page": c.page,
-                "chunk_index": c.chunk_index,
+                "source_id": str(c.source_id),
+                "source_path": str(c.source_path),
+                "page": int(c.page),
+                "chunk_index": int(c.chunk_index),
             }
             for c in chunks
         ]
