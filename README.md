@@ -71,6 +71,29 @@ Full mapping in `docs/hipaa_mapping.md`. Highlights:
 | Transmission security | 45 CFR 164.312(e) | TLS everywhere, Bedrock via VPC endpoints in `terraform/vpc.tf` |
 | Accounting of disclosures | 45 CFR 164.528 | audit rows with `retrieved_chunk_ids` + `citations` |
 
+### 18 Safe Harbor identifiers, at a glance
+
+| # | Identifier | Operator applied |
+| --- | --- | --- |
+| 1 | Names | pseudonymize `PERSON_<h>` |
+| 2 | Geographic subdivision < state | replace with `<LOCATION>` |
+| 3 | Dates (except year) | replace with `<DATE>` (or date-shift) |
+| 4 | Telephone | pseudonymize `PHONE_<h>` |
+| 5 | Fax | pseudonymize (same family as phone) |
+| 6 | Email | pseudonymize `EMAIL_<h>` |
+| 7 | SSN | mask last 5 with `*` |
+| 8 | MRN | pseudonymize `MRN_<h>` (custom recognizer) |
+| 9 | Health plan beneficiary | pseudonymize `PLAN_<h>` (custom) |
+| 10 | Account numbers (incl. cards) | mask last 12 |
+| 11 | Certificate / license (DEA, NPI, DL) | pseudonymize (custom + built-in) |
+| 12 | Vehicle VIN | replace |
+| 13 | Device serial | replace |
+| 14 | URLs | replace with `<URL>` |
+| 15 | IP address | replace with `<IP>` |
+| 16 | Biometric | replace |
+| 17 | Full-face photograph | out of scope (text-only) |
+| 18 | Any other unique code | catch-all `<REDACTED>` |
+
 ## Quick start
 
 ```bash
