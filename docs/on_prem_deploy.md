@@ -17,9 +17,12 @@ datacenter.
 | Tracing | OTLP -> Jaeger or AWS Distro for OTel | OTLP -> Grafana Tempo, on-prem Grafana |
 | KMS | AWS KMS | HashiCorp Vault Transit or hardware HSM |
 
-## Config knobs
+## Config knobs (design)
 
-Set in `.env` or the deployment secret manager:
+The migration would add the following config surface. Only
+`USE_LOCAL_EMBEDDINGS` is wired into the current code (see
+`src/embed.py::make_embedder`); the LLM and guardrail knobs are
+migration targets, not implemented.
 
 ```
 USE_LOCAL_EMBEDDINGS=true
@@ -30,10 +33,9 @@ GUARDRAIL_PROVIDER=nemo
 NEMO_CONFIG_DIR=/etc/compliance-rag/nemo
 ```
 
-Corresponding branches in `src/embed.py` and `src/generate.py` short-
-circuit before any boto3 client is created. Bedrock never gets
-initialized in on-prem mode; there are no dangling IAM roles pointing to
-public AWS.
+`src/generate.py` currently initializes a Bedrock client unconditionally;
+adapting it to a vLLM or TGI backend is part of the migration work, not
+part of the shipped code.
 
 ## Network posture
 
@@ -43,19 +45,18 @@ public AWS.
 - Central log aggregation via rsyslog / Splunk HEC, no vendor cloud
   telemetry.
 
-## Deployment options
+## Deployment options (design outline)
 
 1. **Kubernetes with Helm chart** (preferred).
-   Manifests in `deploy/k8s/` (not yet checked in). Uses SealedSecrets
-   for `.env` values and Kyverno policies to prevent any pod from
-   opening a socket to a non-cluster IP.
+   Not included in this repo. Would use SealedSecrets for `.env`
+   values and Kyverno policies to prevent any pod from opening a
+   socket to a non-cluster IP.
 
 2. **Systemd on baremetal**.
-   For sites without Kubernetes. Provided the machine has NVIDIA drivers
-   + CUDA 12.4 + Python 3.11, a systemd unit template lives in
-   `deploy/systemd/` (also pending). vLLM + the API + Postgres each run
-   as separate units, tied together with a network namespace so nothing
-   listens on the wire.
+   For sites without Kubernetes. On a host with NVIDIA drivers, CUDA
+   12.4, and Python 3.11, vLLM + the API + Postgres would each run as
+   separate units, tied together with a network namespace so nothing
+   listens on the wire. Unit files are not included.
 
 ## What you lose
 

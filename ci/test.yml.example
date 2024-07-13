@@ -1,7 +1,3 @@
-# Example GitHub Actions CI. Save at .github/workflows/test.yml when your
-# token has the `workflow` scope. Runs unit tests + presidio recognizer
-# tests + audit hash chain tests. Bedrock is mocked so the pipeline needs
-# no AWS credentials.
 name: test
 
 on:

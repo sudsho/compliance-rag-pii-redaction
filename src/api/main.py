@@ -5,6 +5,7 @@ Auth: bearer JWT. Roles + org_id + consented patient ids read from claims.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
@@ -223,7 +224,7 @@ def audit(ident=Depends(get_identity)):
             AuditRowOut(
                 id=r.id, request_id=r.request_id, ts=r.ts,
                 user_id=r.user_id, org_id=r.org_id, question_hash=r.question_hash,
-                retrieved_chunk_ids=eval(r.retrieved_chunk_ids) if r.retrieved_chunk_ids.startswith("[") else [],
+                retrieved_chunk_ids=json.loads(r.retrieved_chunk_ids) if r.retrieved_chunk_ids.startswith("[") else [],
                 guardrail_prompt=r.guardrail_prompt, guardrail_response=r.guardrail_response,
                 row_hash=r.row_hash, prev_hash=r.prev_hash,
             )

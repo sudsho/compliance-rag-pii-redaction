@@ -1,14 +1,21 @@
-"""retrieval with acl filtering + hybrid bm25 + dense.
+"""retrieval with acl predicate + dense retrieval + bm25 rerank.
 
 Flow:
-    1. Build a Chroma `where` clause from caller identity (roles, org,
-       consented patient ids).
-    2. Run dense retrieval against Chroma (already filtered by ACL).
-    3. Run BM25 over the same filtered subset in memory.
-    4. Fuse with reciprocal rank fusion.
+    1. Build a Chroma `where` predicate from caller identity (roles,
+       org, consented patient ids).
+    2. Run dense retrieval against Chroma.
+    3. Run BM25 over the dense candidate pool in memory (rerank).
+    4. Fuse the dense ordering and the BM25 ordering with reciprocal
+       rank fusion.
 
 Fail-closed: if the caller identity is missing roles OR org, we return
 zero hits and log a compliance event.
+
+Note on the `$contains` predicate below: it reflects the design intent
+against a Chroma release that supports it. The chromadb version pinned
+in requirements does not accept `$contains` for metadata `where`; real
+deployments will need to either adapt the predicate to their Chroma
+version or filter roles in Python alongside the patient consent check.
 """
 
 from __future__ import annotations

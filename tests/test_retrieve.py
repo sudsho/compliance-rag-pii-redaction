@@ -1,7 +1,6 @@
-"""hybrid retrieval: rrf fusion + acl visibility.
+"""retrieval: rrf fusion of dense + bm25 rerank, acl visibility.
 
-Uses the Store mock; the real ChromaDB integration is exercised in
-tests/test_e2e_chromadb.py (marked integration, skipped in unit run).
+Uses a Store mock so these run without a live ChromaDB.
 """
 
 from __future__ import annotations

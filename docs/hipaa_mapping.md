@@ -7,29 +7,39 @@ technical starting point for a Security Officer's review.
 
 ## Safe Harbor de-identification (45 CFR 164.514(b)(2))
 
-Each of the 18 identifiers must be removed for a dataset to qualify as
-de-identified under the Safe Harbor method.
+The Safe Harbor method requires removal of 18 identifier categories.
+This pipeline covers 16 of them. Two are called out below the table.
 
 | # | Identifier | Where it is handled | How |
 | --- | --- | --- | --- |
 | 1 | Names | `src/presidio_redact.py` + Presidio `PERSON` recognizer | pseudonymized to `PERSON_<hash10>` |
 | 2 | Geographic subdivisions < state | `src/presidio_redact.py` + Presidio `LOCATION` | replaced with `<LOCATION>` |
-| 3 | Dates (except year) | `src/presidio_redact.py` + Presidio `DATE_TIME` | replaced with `<DATE>` (or date-shifted) |
+| 3 | Dates (except year) | `src/presidio_redact.py` + Presidio `DATE_TIME` | replaced with `<DATE>` |
 | 4 | Telephone | Presidio `PHONE_NUMBER` | pseudonymized to `PHONE_<hash10>` |
 | 5 | Fax | Presidio `PHONE_NUMBER` (same regex family) | pseudonymized |
 | 6 | Email | Presidio `EMAIL_ADDRESS` | pseudonymized to `EMAIL_<hash10>` |
-| 7 | SSN | Presidio `US_SSN` | last 5 masked with `*` |
+| 7 | SSN | Presidio `US_SSN` | partial mask: last 5 digits replaced with `*` (area and group digits remain) |
 | 8 | Medical record number | Custom recognizer `MRN` in `configs/hipaa_recognizers.yaml` | pseudonymized to `MRN_<hash10>` |
 | 9 | Health plan beneficiary number | Custom recognizer `HEALTH_PLAN_ID` | pseudonymized to `PLAN_<hash10>` |
-| 10 | Account numbers | Presidio `CREDIT_CARD` + custom `HEALTH_PLAN_ID` | masked / pseudonymized |
+| 10 | Account numbers | Presidio `CREDIT_CARD` + custom `HEALTH_PLAN_ID` | partial mask / pseudonymized (issuer prefix on cards remains) |
 | 11 | Certificate / license (DEA, NPI, DL) | Custom `DEA_NUMBER`, `NPI` + Presidio `US_DRIVER_LICENSE` | pseudonymized |
 | 12 | Vehicle identifiers | Custom `VEHICLE_VIN` | replaced |
 | 13 | Device identifiers | Custom `DEVICE_SERIAL` | replaced |
 | 14 | Web URLs | Presidio `URL` | replaced with `<URL>` |
 | 15 | IP addresses | Presidio `IP_ADDRESS` | replaced with `<IP>` |
 | 16 | Biometric | Custom `BIOMETRIC` | replaced |
-| 17 | Full-face photographs | out of scope (text-only pipeline) | n/a |
-| 18 | Any other unique code | catch-all `DEFAULT` operator | replaced with `<REDACTED>` |
+
+Not covered by this pipeline:
+
+- **17 Full-face photographs**: out of scope for a text-only pipeline.
+- **18 Any other unique code**: no dedicated catch-all recognizer.
+  Presidio's `DEFAULT` operator only anonymizes entities that another
+  recognizer has already detected; it cannot detect novel unique codes
+  on its own.
+
+Both SSN and account-number handling are partial masks rather than full
+removal; a Safe Harbor deployment must either extend the operator config
+to redact fully or apply a subsequent expert-determination review.
 
 ## Security Rule controls
 

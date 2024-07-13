@@ -6,8 +6,9 @@ record is the record of what happened.
 
 ## Goals
 
-1. Non-repudiable: if a row was written, we can prove nobody edited it
-   after the fact.
+1. Tamper-evident: if a row was edited after write, the chain no longer
+   verifies. The chain is unkeyed SHA-256, so it is evidence of an
+   edit, not a cryptographic signature; it is not non-repudiable.
 2. Non-leaking: the raw question, raw retrieved chunk text, and raw
    model output never land in the audit table.
 3. Queryable: an auditor should be able to reconstruct "what did user X
@@ -70,8 +71,7 @@ in time. Two supported patterns:
   policy: keep at least 7 years of collections for PHI-scoped orgs.
 - **Point-in-time export**: nightly export of the current Chroma
   collection to S3 (versioned bucket, immutable retention lock). Audit
-  rows include `retrieved_at` = timestamp we can round to the nearest
-  snapshot.
+  rows are timestamped and can be rounded to the nearest snapshot.
 
 Both are documented in `docs/on_prem_deploy.md` for on-prem variants.
 
@@ -102,11 +102,17 @@ Both are documented in `docs/on_prem_deploy.md` for on-prem variants.
 
 ## Failure modes handled
 
-- Concurrent writers: the write path takes a serialized SQL transaction
-  and computes `prev_hash` inside it. Two writers cannot both use the
-  same `prev_hash` even if they arrive within the same millisecond.
 - Partial write / crash: SQLAlchemy commit is atomic per row; a crash
   either leaves N rows or N+1 rows, never a half row.
 - Clock skew: we accept the timestamp the server (not the client) sees,
   in UTC. Chain integrity does not depend on wall-clock ordering
   matching insertion ordering; the `id` sequence is the source of truth.
+
+## Not handled
+
+- Concurrent writers. The write path opens a plain SQLAlchemy session
+  with no isolation level, row lock, or advisory lock. Two writers
+  under the default Postgres isolation can read the same `prev_hash`
+  and both commit, forking the chain. Adding an advisory lock around
+  the prev-hash read + insert (or moving to `SERIALIZABLE`) is required
+  before running with more than one API replica.

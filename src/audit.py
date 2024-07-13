@@ -112,9 +112,21 @@ class AuditLog:
         return row.row_hash if row else GENESIS_HASH
 
     def write(self, **fields: Any) -> AuditRecord:
+        # Normalize ts to a naive UTC isoformat string so the value we
+        # hash matches the value we get back from SQLAlchemy's DateTime
+        # column on any backend (SQLite drops tzinfo on read).
+        ts_arg = fields.get("ts")
+        if ts_arg:
+            ts_dt = datetime.fromisoformat(ts_arg)
+        else:
+            ts_dt = datetime.now(tz=timezone.utc)
+        if ts_dt.tzinfo is not None:
+            ts_dt = ts_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        ts_str = ts_dt.isoformat()
+
         rec = AuditRecord(
             request_id=fields.get("request_id") or str(uuid.uuid4()),
-            ts=fields.get("ts") or datetime.now(tz=timezone.utc).isoformat(),
+            ts=ts_str,
             user_id=fields["user_id"],
             roles=list(fields.get("roles") or []),
             org_id=fields["org_id"],
@@ -134,7 +146,7 @@ class AuditLog:
             rec.row_hash = compute_row_hash(rec)
             row = AuditRow(
                 request_id=rec.request_id,
-                ts=datetime.fromisoformat(rec.ts),
+                ts=ts_dt,
                 user_id=rec.user_id,
                 roles=",".join(rec.roles),
                 org_id=rec.org_id,

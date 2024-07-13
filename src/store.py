@@ -7,8 +7,11 @@ Every chunk carries:
   - sensitivity       str  ("public"|"internal"|"restricted")
 
 Chroma <=0.5 stores each metadata value as a scalar, so lists are joined
-with a `|` delimiter and matched via `$contains`-style predicates in
-retrieve.py. Ugly but portable.
+with a `|` delimiter. The retrieve module's ACL predicate uses
+`$contains` on this packed form to express the design intent; note the
+pinned chromadb version does not accept that operator for metadata
+`where` clauses, so real deployments will need to adapt the predicate
+or filter in Python (see docstring in retrieve.py).
 """
 
 from __future__ import annotations

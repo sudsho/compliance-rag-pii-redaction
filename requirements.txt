@@ -1,9 +1,3 @@
-# core rag
-langchain==0.2.5
-langgraph==0.1.8
-openai==1.35.7
-anthropic==0.30.1
-
 # aws
 boto3==1.34.140
 
@@ -30,7 +24,6 @@ streamlit==1.36.0
 # observability
 opentelemetry-api==1.25.0
 opentelemetry-sdk==1.25.0
-opentelemetry-instrumentation-fastapi==0.46b0
 opentelemetry-exporter-otlp==1.25.0
 
 # audit log
@@ -41,7 +34,6 @@ alembic==1.13.1
 # document parsers
 pypdf==4.2.0
 python-docx==1.1.2
-markdown-it-py==3.0.0
 
 # config
 pyyaml==6.0.1
@@ -49,6 +41,4 @@ python-dotenv==1.0.1
 
 # tests
 pytest==8.2.2
-pytest-asyncio==0.23.7
 httpx==0.27.0
-moto==5.0.9

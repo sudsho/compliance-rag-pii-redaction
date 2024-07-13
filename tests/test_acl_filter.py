@@ -2,8 +2,7 @@
 
 We stub the Store to avoid a real chromadb dependency in unit tests.
 Instead we test the where-clause builder + patient consent filter
-directly. There is a separate integration test that goes end-to-end
-against a live chromadb.
+directly.
 """
 
 from __future__ import annotations
