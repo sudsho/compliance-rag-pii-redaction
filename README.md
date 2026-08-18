@@ -60,13 +60,12 @@ column in the audit row.
    table in `docs/hipaa_mapping.md`.
 3. Redacted question hits Bedrock Guardrails as INPUT; if any policy
    triggers we return a canned refusal and write an audit row.
-4. Retrieval builds a Chroma `where` predicate from the caller identity
-   (`src/retrieve.py::_acl_where`). The predicate shape uses
-   `$contains` and reflects the design intent. The pinned ChromaDB
-   version does not accept it as written; callers running against real
-   Chroma will need to adapt the predicate to their Chroma version, or
-   filter roles in Python alongside the patient consent check. Patient
-   consent is enforced in a second-pass Python filter regardless.
+4. Retrieval enforces the ACL in Python (`src/retrieve.py::_doc_visible`):
+   role, org, and patient-consent checks run over the candidate pool, so
+   it works against any ChromaDB version. `_acl_where` is kept as the
+   documented server-side predicate shape (it uses `$contains`, which the
+   pinned ChromaDB does not accept for metadata, so it is not sent to the
+   server) and is still exercised by the unit tests.
 5. Dense retrieval against the ACL-filtered set, then BM25 reranking
    over the dense candidate pool, fused with reciprocal rank fusion.
 6. Bedrock Claude 3.5 Sonnet generates an answer with inline
@@ -115,7 +114,121 @@ Not covered:
 - Catch-all for "any other unique code" (identifier #18): no dedicated
   detector.
 
-## Quick start
+## Quick start (runs offline, no keys)
+
+The whole pipeline runs on a CPU box with no AWS credentials, no API keys
+and no large downloads. When no AWS credentials are present the code takes
+a local path: a deterministic hashing embedder replaces Titan, and a local
+extractive generator (top-k retrieved chunks stitched into a cited answer)
+replaces Claude. Presidio and ChromaDB already run locally on CPU. The
+real Bedrock path stays selectable through `EMBEDDINGS_BACKEND` /
+`GENERATOR_BACKEND` (or by providing AWS creds).
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # optional
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm              # ~12 MB, not the 560 MB lg
+
+# end-to-end demo: ingest -> ask -> redact -> acl deny -> audit chain
+make smoke        # or: SPACY_MODEL=en_core_web_sm python -m examples.smoke
+
+# the offline unit tests (redaction + acl + audit chain + api surface)
+SPACY_MODEL=en_core_web_sm pytest -q
+```
+
+`pytest -q` result on the machine this was verified on: **43 passed** (0
+failed, 0 errors), collected from `tests/`.
+
+Real output of `make smoke` (verbatim, hashing embeddings so it is
+reproducible):
+
+```text
+offline smoke test  (workdir: ...\compliance_rag_smoke_xxxxxxxx)
+embeddings backend : hash
+generator backend  : local
+
+====================================================================
+1. INGEST synthetic policy documents
+====================================================================
+  ingested care_management_hf_stage3.md                2 chunks  [roles=nurse,case_manager,admin sensitivity=restricted]
+  ingested coverage_policy_diabetes_supplies.md        3 chunks  [roles=nurse,case_manager,admin,member_services sensitivity=internal]
+  ingested durable_medical_equipment_general.md        2 chunks  [roles=nurse,case_manager,admin sensitivity=internal]
+  ingested formulary_glp1_step_therapy.md              2 chunks  [roles=nurse,case_manager,admin,member_services,pharmacist sensitivity=internal]
+  ingested prior_auth_mri_lumbar.md                    2 chunks  [roles=nurse,case_manager,admin,member_services,reviewer sensitivity=internal]
+  ---
+  total chunks in store: 11
+
+====================================================================
+2. ASK a policy question (authorized nurse) -> cited answer
+====================================================================
+  user   : nurse-1 roles=['nurse'] org=acme-payer
+  question: When is prior authorization required for a lumbar MRI?
+
+  answer:
+    Based on the retrieved plan policy documents:
+
+    - Prior authorization required for elective outpatient MRI of the lumbar [prior_auth_mri_lumbar:p1#0]
+    - Required for items > $500 acquisition cost. [durable_medical_equipment_general:p1#1]
+    - is used for a medical purpose [durable_medical_equipment_general:p1#0]
+    - least one preferred agent for a minimum of 90 days before non-preferred [formulary_glp1_step_therapy:p1#0]
+
+  citations:
+    - prior_auth_mri_lumbar p1 #chunk0
+    - durable_medical_equipment_general p1 #chunk1
+    - durable_medical_equipment_general p1 #chunk0
+    - formulary_glp1_step_therapy p1 #chunk0
+
+  retrieved 6 chunks from: ['coverage_policy_diabetes_supplies', 'durable_medical_equipment_general', 'formulary_glp1_step_therapy', 'prior_auth_mri_lumbar']
+
+====================================================================
+3. REDACT a PII-laden query -> before / after
+====================================================================
+  BEFORE:
+    Patient John Smith (MRN: 000123456, SSN 412-34-5678, phone 617-555-0134, email john.smith@example.org) is asking whether his lumbar MRI needs prior authorization.
+
+  AFTER (what the model actually sees):
+    Patient PERSON_K2S6NPDXU7 (MRN_PADNUC37AG, <REDACTED> 412-34*****, phone PHONE_7N7RKYI3D7, email EMAIL_DI4B3SR63O) is asking whether his lumbar MRI needs prior authorization.
+
+  entities detected: 10  by_type={'MEDICAL_RECORD_NUMBER': 1, 'EMAIL_ADDRESS': 1, 'PERSON': 1, 'ORGANIZATION': 2, 'DATE_TIME': 1, 'US_SSN': 1, 'PHONE_NUMBER': 1, 'URL': 2}
+
+====================================================================
+4. ACL enforcement -> unauthorized role is denied a restricted doc
+====================================================================
+  restricted doc     : care_management_hf_stage3  (allowed_roles=nurse,case_manager,admin)
+  query              : heart failure stage 3 care management enrollment criteria
+
+  nurse           sees: ['care_management_hf_stage3', 'coverage_policy_diabetes_supplies', 'durable_medical_equipment_general', 'formulary_glp1_step_therapy', 'prior_auth_mri_lumbar']
+  member_services sees: ['coverage_policy_diabetes_supplies', 'formulary_glp1_step_therapy', 'prior_auth_mri_lumbar']
+
+  OK: 'care_management_hf_stage3' visible to nurse, DENIED to member_services
+
+====================================================================
+5. AUDIT hash-chain -> append, verify, tamper, detect
+====================================================================
+  appended 3 rows. verify_chain() -> ok=True broken_at=0
+  tampered: UPDATE audit_log SET roles='admin' WHERE id = 2
+  verify_chain() -> ok=False broken_at=2
+  OK: tamper detected at row 2
+
+====================================================================
+SMOKE TEST PASSED
+====================================================================
+  ingest -> ask -> redact -> acl deny -> audit chain all green.
+```
+
+Notes on the offline path:
+
+- Embeddings default to a deterministic hashing vectorizer so the demo
+  needs zero model downloads. Set `EMBEDDINGS_BACKEND=local` to use the
+  `sentence-transformers` e5 model instead, or provide AWS creds to use
+  Titan.
+- Generation uses `LocalExtractiveGenerator`, which selects the most
+  relevant sentence from each retrieved chunk and appends its citation.
+  It is intentionally extractive and deterministic, not an LLM.
+- The `$500` example threshold above is a synthetic policy value, not a
+  real coverage rule.
+
+## Quick start (full stack: Bedrock + Postgres)
 
 ```bash
 # 1. install
@@ -149,10 +262,10 @@ src/
   ingest.py              PDF/DOCX/MD ingestion with page provenance
   presidio_redact.py     Presidio wrapper with 8 custom HIPAA recognizers
   pseudonym.py           HMAC-based deterministic pseudonymization
-  embed.py               Bedrock Titan v2 embeddings, local fallback
+  embed.py               Titan v2 / sentence-transformers / hashing embedder
   store.py               ChromaDB with per-doc ACL metadata
-  retrieve.py            ACL predicate + dense retrieval + BM25 rerank
-  generate.py            Bedrock Claude 3.5 Sonnet, cited answers
+  retrieve.py            Python ACL filter + dense retrieval + BM25 rerank
+  generate.py            Bedrock Claude 3.5 Sonnet or local extractive, cited
   guardrails.py          Bedrock Guardrails wrapper, escalation paths
   audit.py               Hash-chained audit log
   otel.py                OpenTelemetry GenAI-conv spans

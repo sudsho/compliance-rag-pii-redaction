@@ -1,4 +1,4 @@
-.PHONY: install fmt lint test run api ui ingest audit-verify clean compose-up compose-down
+.PHONY: install install-offline smoke fmt lint test run api ui ingest audit-verify clean compose-up compose-down
 
 PYTHON ?= python
 UVICORN ?= uvicorn
@@ -6,6 +6,15 @@ UVICORN ?= uvicorn
 install:
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m spacy download en_core_web_lg
+
+# offline path: small spaCy model (~12 MB), no cloud creds needed
+install-offline:
+	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m spacy download en_core_web_sm
+
+# end-to-end offline demo: ingest -> ask -> redact -> acl deny -> audit chain
+smoke:
+	SPACY_MODEL=en_core_web_sm $(PYTHON) -m examples.smoke
 
 fmt:
 	ruff format src tests scripts

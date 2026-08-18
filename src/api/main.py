@@ -27,7 +27,7 @@ from src.api.schemas import (
     RetrievedChunk,
 )
 from src.audit import AuditLog, hash_question
-from src.generate import BedrockGenerator
+from src.generate import BedrockGenerator, make_generator
 from src.guardrails import BedrockGuardrails, GuardrailVerdict
 from src.identity import AuthError, identity_from_token
 from src.ingest import ingest_file
@@ -50,7 +50,7 @@ class _Deps:
         self.redactor: Redactor | None = None
         self.store: Store | None = None
         self.retriever: Retriever | None = None
-        self.generator: BedrockGenerator | None = None
+        self.generator: BedrockGenerator | object | None = None
         self.guardrails: BedrockGuardrails | None = None
         self.audit: AuditLog | None = None
 
@@ -72,7 +72,7 @@ def startup() -> None:
     )
     _deps.store = Store()
     _deps.retriever = Retriever(_deps.store)
-    _deps.generator = BedrockGenerator()
+    _deps.generator = make_generator()
     _deps.guardrails = BedrockGuardrails()
     _deps.audit = AuditLog()
 

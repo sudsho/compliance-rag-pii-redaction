@@ -26,12 +26,45 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import os
+
 import yaml
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
 from src.pseudonym import PseudonymConfig, pseudonym
+
+
+# Presidio defaults to en_core_web_lg (~560 MB). For an offline / CPU box we
+# use whichever spaCy model is actually installed, preferring larger models
+# but happily running on en_core_web_sm (~12 MB). SPACY_MODEL overrides.
+_SPACY_MODEL_PREFERENCE = ["en_core_web_lg", "en_core_web_md", "en_core_web_sm"]
+
+
+def _pick_spacy_model() -> str | None:
+    import spacy.util
+
+    forced = os.environ.get("SPACY_MODEL")
+    candidates = [forced] + _SPACY_MODEL_PREFERENCE if forced else _SPACY_MODEL_PREFERENCE
+    for model in candidates:
+        if model and spacy.util.is_package(model):
+            return model
+    return None
+
+
+def _build_nlp_engine(language: str):
+    model = _pick_spacy_model()
+    if not model:
+        return None
+    provider = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": language, "model_name": model}],
+        }
+    )
+    return provider.create_engine()
 
 
 @dataclass
@@ -50,7 +83,14 @@ class Redactor:
         language: str = "en",
         pseudonym_config: PseudonymConfig | None = None,
     ) -> None:
-        self.analyzer = AnalyzerEngine(default_score_threshold=0.35)
+        nlp_engine = _build_nlp_engine(language)
+        if nlp_engine is not None:
+            self.analyzer = AnalyzerEngine(
+                nlp_engine=nlp_engine, default_score_threshold=0.35
+            )
+        else:
+            # no spaCy model installed; let presidio use its default config
+            self.analyzer = AnalyzerEngine(default_score_threshold=0.35)
         self.anonymizer = AnonymizerEngine()
         self.language = language
         self.pseudonym_config = pseudonym_config

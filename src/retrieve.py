@@ -56,10 +56,14 @@ class Hit:
 
 
 def _acl_where(identity: CallerIdentity) -> dict:
-    """Chroma metadata predicate.
+    """Chroma metadata predicate (design intent).
 
-    We store packed lists with a `|` delimiter, so we use `$contains`
-    (substring match) which is what Chroma exposes for strings.
+    We store packed lists with a `|` delimiter, so this expresses the ACL
+    as `$contains` (substring match) clauses. The pinned chromadb version
+    does not accept `$contains` for metadata `where`, so `retrieve()` does
+    not send this to the server; it enforces the same rule in Python via
+    `_doc_visible`. This function is kept as the documented predicate shape
+    and is exercised by the unit tests.
     """
     if not identity.roles or not identity.org_id:
         # canary predicate that matches nothing; fail-closed
@@ -71,6 +75,26 @@ def _acl_where(identity: CallerIdentity) -> dict:
     ]
     org_clause = {"allowed_org_ids": {"$contains": f"{ACL_DELIM}{identity.org_id}{ACL_DELIM}"}}
     return {"$and": [{"$or": role_clauses}, org_clause]}
+
+
+def _doc_visible(identity: CallerIdentity, md: dict) -> bool:
+    """Python-side ACL enforcement that works with any chromadb version.
+
+    A doc is visible when the caller shares at least one allowed role, the
+    caller's org is allowed, and (for patient-scoped docs) the caller has
+    consent for at least one listed patient. An empty allow-list on any
+    axis means "not restricted on that axis".
+    """
+    roles = _unpack_list(md.get("allowed_roles", ""))
+    if roles and not any(r in roles for r in identity.roles):
+        return False
+    orgs = _unpack_list(md.get("allowed_org_ids", ""))
+    if orgs and identity.org_id not in orgs:
+        return False
+    patients = _unpack_list(md.get("allowed_patient_ids", ""))
+    if patients and not any(p in identity.consented_patient_ids for p in patients):
+        return False
+    return True
 
 
 def _tokenize(s: str) -> list[str]:
@@ -123,14 +147,17 @@ class Retriever:
                 identity.user_id, identity.org_id, identity.roles,
             )
             return []
-        where = _acl_where(identity)
-        raw = self.store.query(text=query, where=where, k=max(self.k_dense, self.k_bm25) * 2)
+        # _acl_where documents the intended server-side predicate, but the
+        # pinned chromadb rejects `$contains` on metadata, so we retrieve a
+        # wider candidate pool and enforce the ACL in Python (_doc_visible).
+        _ = _acl_where(identity)
+        raw = self.store.query(text=query, where=None, k=max(self.k_dense, self.k_bm25) * 2)
         ids = raw.get("ids", [[]])[0]
         docs = raw.get("documents", [[]])[0]
         mds = raw.get("metadatas", [[]])[0]
         dists = raw.get("distances", [[]])[0]
 
-        keep_mask = self._patient_filter(identity, mds)
+        keep_mask = [_doc_visible(identity, md or {}) for md in mds]
 
         pool = [
             {

@@ -42,8 +42,8 @@ HIPAA_CASES = [
     ("Fax the release form to 617-555-0198.", "617-555-0198", "PHONE_NUMBER"),
     # 6 email
     ("Contact jane.doe@example.org for prior auth.", "jane.doe@example.org", "EMAIL_ADDRESS"),
-    # 7 ssn
-    ("SSN 123-45-6789", "123-45-6789", "US_SSN"),
+    # 7 ssn (avoid 123-45-6789: presidio blocklists it as a sample placeholder)
+    ("SSN 412-34-5678", "412-34-5678", "US_SSN"),
     # 8 medical record number
     ("MRN: 000123456 on file.", "000123456", "MEDICAL_RECORD_NUMBER"),
     # 9 health plan beneficiary

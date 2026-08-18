@@ -30,6 +30,7 @@ from typing import Any
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.pool import StaticPool
 
 
 GENESIS_HASH = "0" * 64
@@ -102,7 +103,14 @@ class AuditLog:
         url = db_url or os.environ.get(
             "AUDIT_DB_URL", "sqlite+pysqlite:///audit.db"
         )
-        self.engine = create_engine(url, echo=echo, future=True)
+        engine_kwargs: dict = {"echo": echo, "future": True}
+        # In-memory SQLite hands out a fresh empty database per connection, so
+        # the schema created below would vanish on the next checkout. Pin a
+        # single shared connection so the chain survives across sessions.
+        if url.startswith("sqlite") and ":memory:" in url:
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            engine_kwargs["poolclass"] = StaticPool
+        self.engine = create_engine(url, **engine_kwargs)
         Base.metadata.create_all(self.engine)
 
     def _prev_hash(self, session: Session) -> str:
